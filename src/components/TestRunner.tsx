@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Play, Pause, RotateCcw, Zap, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStoredData, saveStoredData } from '@/lib/storage';
+import axios from 'axios';
 
 interface Endpoint {
   id: string;
@@ -19,13 +20,14 @@ interface Endpoint {
 
 interface TestResult {
   id: string;
-  endpoint: string;
-  status: 'pass' | 'fail' | 'pending' | 'running';
-  vulnerability?: string;
+  endpointName: string;
+  url: string;
+  method: string;
+  status: 'secure' | 'vulnerable' | 'error';
+  vulnerabilities: string[];
   responseTime?: number;
   statusCode?: number;
   timestamp: string;
-  details?: string;
 }
 
 export const TestRunner = () => {
@@ -50,62 +52,95 @@ export const TestRunner = () => {
   const runSingleTest = async (endpoint: Endpoint): Promise<TestResult> => {
     const startTime = Date.now();
     setCurrentTest(endpoint.id);
-
-    // Simulate vulnerability tests
-    const tests = [
-      { name: 'SQL Injection', pattern: /['";]/, risk: 'high' },
-      { name: 'XSS Vulnerability', pattern: /<script|javascript:|on\w+=/i, risk: 'critical' },
-      { name: 'Command Injection', pattern: /[;&|`$(){}]/, risk: 'critical' },
-      { name: 'Path Traversal', pattern: /\.\.[\/\\]/, risk: 'medium' },
-      { name: 'LDAP Injection', pattern: /[()&|!]/, risk: 'medium' },
-    ];
-
+    
     try {
-      // Simulate network request
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 500));
-      
-      const responseTime = Date.now() - startTime;
-      let vulnerability = '';
-      let status: 'pass' | 'fail' = 'pass';
-      let statusCode = 200;
-
-      // Simple vulnerability detection based on URL patterns
-      for (const test of tests) {
-        if (test.pattern.test(endpoint.url) || (endpoint.body && test.pattern.test(endpoint.body))) {
-          vulnerability = test.name;
-          status = 'fail';
-          break;
+      // Parse headers if provided
+      let headers = {};
+      if (endpoint.headers) {
+        try {
+          headers = JSON.parse(endpoint.headers);
+        } catch (e) {
+          console.warn('Invalid headers JSON:', endpoint.headers);
         }
       }
 
-      // Random status codes for demo
-      const possibleCodes = [200, 401, 403, 404, 500, 502];
-      statusCode = possibleCodes[Math.floor(Math.random() * possibleCodes.length)];
+      // Prepare request config
+      const config: any = {
+        method: endpoint.method.toLowerCase(),
+        url: endpoint.url,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        timeout: 10000,
+        validateStatus: () => true // Accept all status codes
+      };
 
-      // Determine status based on response code if no vulnerability found
-      if (status === 'pass' && statusCode >= 400) {
-        status = 'fail';
-        vulnerability = `HTTP Error ${statusCode}`;
+      // Add body for POST/PUT/PATCH requests
+      if (['post', 'put', 'patch'].includes(config.method) && endpoint.body) {
+        try {
+          config.data = JSON.parse(endpoint.body);
+        } catch (e) {
+          config.data = endpoint.body;
+        }
+      }
+
+      const response = await axios(config);
+      const responseTime = Date.now() - startTime;
+
+      // Basic vulnerability checks
+      const vulnerabilities = [];
+      
+      // Check for common security headers
+      if (!response.headers['x-content-type-options']) {
+        vulnerabilities.push('Missing X-Content-Type-Options header');
+      }
+      if (!response.headers['x-frame-options']) {
+        vulnerabilities.push('Missing X-Frame-Options header');
+      }
+      if (!response.headers['x-xss-protection']) {
+        vulnerabilities.push('Missing X-XSS-Protection header');
+      }
+      if (!response.headers['strict-transport-security'] && endpoint.url.startsWith('https:')) {
+        vulnerabilities.push('Missing Strict-Transport-Security header');
+      }
+      
+      // Check status codes
+      if (response.status >= 500) {
+        vulnerabilities.push('Server Error - Potential Information Disclosure');
+      }
+      
+      // Check for SQL injection patterns in response
+      const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      if (responseText.includes('mysql_') || responseText.includes('ORA-') || responseText.includes('SQLException')) {
+        vulnerabilities.push('Potential SQL Error Information Disclosure');
       }
 
       return {
         id: `${endpoint.id}_${Date.now()}`,
-        endpoint: `${endpoint.method} ${endpoint.url}`,
-        status,
-        vulnerability: vulnerability || undefined,
+        endpointName: endpoint.name,
+        url: endpoint.url,
+        method: endpoint.method,
+        status: vulnerabilities.length > 0 ? 'vulnerable' : 'secure',
+        vulnerabilities,
         responseTime,
-        statusCode,
-        timestamp: new Date().toISOString(),
-        details: `Response time: ${responseTime}ms, Status: ${statusCode}`
+        statusCode: response.status,
+        timestamp: new Date().toISOString()
       };
-    } catch (error) {
+
+    } catch (error: any) {
+      const responseTime = Date.now() - startTime;
+      
       return {
         id: `${endpoint.id}_${Date.now()}`,
-        endpoint: `${endpoint.method} ${endpoint.url}`,
-        status: 'fail',
-        vulnerability: 'Connection Failed',
-        timestamp: new Date().toISOString(),
-        details: 'Unable to connect to endpoint'
+        endpointName: endpoint.name,
+        url: endpoint.url,
+        method: endpoint.method,
+        status: 'error',
+        vulnerabilities: [`Connection Error: ${error.message}`],
+        responseTime,
+        statusCode: 0,
+        timestamp: new Date().toISOString()
       };
     }
   };
@@ -139,9 +174,9 @@ export const TestRunner = () => {
     setIsRunning(false);
     setProgress(100);
 
-    const failedCount = newResults.filter(r => r.status === 'fail').length;
+    const failedCount = newResults.filter(r => r.status === 'vulnerable' || r.status === 'error').length;
     if (failedCount > 0) {
-      toast.error(`Scan complete! Found ${failedCount} vulnerabilities.`);
+      toast.error(`Scan complete! Found ${failedCount} issues.`);
     } else {
       toast.success('Scan complete! No vulnerabilities found.');
     }
@@ -158,8 +193,8 @@ export const TestRunner = () => {
     setIsRunning(false);
     setCurrentTest(null);
 
-    if (result.status === 'fail') {
-      toast.error(`Vulnerability found: ${result.vulnerability}`);
+    if (result.status === 'vulnerable' || result.status === 'error') {
+      toast.error(`Issues found: ${result.vulnerabilities.join(', ')}`);
     } else {
       toast.success('Endpoint test passed!');
     }
@@ -173,8 +208,9 @@ export const TestRunner = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pass': return <CheckCircle className="h-4 w-4 text-success" />;
-      case 'fail': return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      case 'secure': return <CheckCircle className="h-4 w-4 text-success" />;
+      case 'vulnerable': return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      case 'error': return <AlertTriangle className="h-4 w-4 text-warning" />;
       case 'running': return <Clock className="h-4 w-4 text-warning animate-spin" />;
       default: return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
@@ -318,21 +354,26 @@ export const TestRunner = () => {
                   <div className="flex items-center gap-3 flex-1">
                     {getStatusIcon(result.status)}
                     <div>
-                      <p className="font-mono text-sm font-medium">{result.endpoint}</p>
-                      {result.vulnerability && (
-                        <p className="text-sm text-destructive font-semibold">
-                          🚨 {result.vulnerability}
-                        </p>
+                      <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{result.method} {result.url}</p>
+                      {result.vulnerabilities.length > 0 && (
+                        <div className="mt-1 space-y-1">
+                          {result.vulnerabilities.map((vuln, index) => (
+                            <p key={index} className="text-sm text-destructive font-semibold">
+                              🚨 {vuln}
+                            </p>
+                          ))}
+                        </div>
                       )}
-                      {result.details && (
-                        <p className="text-xs text-muted-foreground">{result.details}</p>
-                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Response: {result.responseTime}ms | Status: {result.statusCode}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge
-                      variant={result.status === 'pass' ? 'default' : 'destructive'}
-                      className={result.status === 'pass' ? 'bg-success text-success-foreground success-glow' : 'danger-glow'}
+                      variant={result.status === 'secure' ? 'default' : 'destructive'}
+                      className={result.status === 'secure' ? 'bg-success text-success-foreground success-glow' : 'danger-glow'}
                     >
                       {result.status.toUpperCase()}
                     </Badge>

@@ -34,28 +34,95 @@ export const ImportExport = () => {
   const [importData, setImportData] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const content = e.target?.result as string;
-      
-      if (file.name.endsWith('.json')) {
-        handleJSONImport(content);
-      } else if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
-        handleCSVImport(content);
-      } else {
-        toast.error('Unsupported file format. Please use JSON, CSV, or XLS files.');
+      try {
+        const text = e.target?.result as string;
+        let data;
+        
+        if (file.name.endsWith('.json')) {
+          data = JSON.parse(text);
+        } else if (file.name.endsWith('.csv')) {
+          // Enhanced CSV parsing for endpoints
+          const lines = text.split('\n').filter(line => line.trim());
+          if (lines.length < 2) {
+            toast.error('CSV file must have headers and at least one data row');
+            return;
+          }
+          
+          const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+          data = lines.slice(1).map((line, index) => {
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+            const endpoint: any = {
+              id: Date.now().toString() + index,
+              method: 'GET',
+              category: 'api',
+              priority: 'medium'
+            };
+            
+            headers.forEach((header, i) => {
+              const value = values[i] || '';
+              switch (header) {
+                case 'name':
+                case 'endpoint name':
+                case 'endpoint_name':
+                  endpoint.name = value;
+                  break;
+                case 'url':
+                case 'endpoint':
+                case 'endpoint_url':
+                  endpoint.url = value;
+                  break;
+                case 'method':
+                case 'http method':
+                case 'http_method':
+                  endpoint.method = value.toUpperCase() || 'GET';
+                  break;
+                case 'headers':
+                case 'request_headers':
+                  endpoint.headers = value;
+                  break;
+                case 'body':
+                case 'request body':
+                case 'request_body':
+                  endpoint.body = value;
+                  break;
+                case 'description':
+                  endpoint.description = value;
+                  break;
+                case 'category':
+                  endpoint.category = value || 'api';
+                  break;
+                case 'priority':
+                  endpoint.priority = value || 'medium';
+                  break;
+              }
+            });
+            
+            return endpoint;
+          }).filter(endpoint => endpoint.name && endpoint.url);
+        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          toast.error('Excel files not directly supported. Please convert to CSV first.');
+          return;
+        }
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          const existingEndpoints = getStoredData('endpoints', []);
+          saveStoredData('endpoints', [...existingEndpoints, ...data]);
+          toast.success(`Successfully imported ${data.length} endpoints`);
+        } else {
+          toast.error('No valid endpoints found in file');
+        }
+      } catch (error) {
+        toast.error('Failed to import file. Please check the format.');
+        console.error('Import error:', error);
       }
     };
-    
-    if (file.name.endsWith('.json')) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsText(file);
-    }
+    reader.readAsText(file);
   };
 
   const handleJSONImport = (jsonContent: string) => {
@@ -265,8 +332,8 @@ export const ImportExport = () => {
                 <input
                   type="file"
                   ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  accept=".json,.csv,.xlsx"
+                  onChange={handleImport}
+                  accept=".json,.csv,.xlsx,.xls"
                   className="hidden"
                 />
                 <Button
@@ -278,7 +345,9 @@ export const ImportExport = () => {
                   Choose File (JSON, CSV, XLS)
                 </Button>
                 <p className="text-sm text-muted-foreground">
-                  Supported formats: JSON, CSV, Excel (.xlsx)
+                  Supported: JSON, CSV files. For Excel: save as CSV first.
+                  <br />
+                  <strong>CSV Headers:</strong> name, url, method, category, priority, description, headers, body
                 </p>
               </div>
             </div>

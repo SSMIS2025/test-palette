@@ -77,7 +77,7 @@ export const EndpointManager = () => {
   };
 
   const handleEdit = (endpoint: Endpoint) => {
-    setFormData(endpoint);
+    setFormData({ ...endpoint });
     setIsEditing(endpoint.id);
   };
 
