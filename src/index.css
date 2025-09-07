@@ -2,52 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Cybersecurity Testing Suite Design System - Dark theme with neon accents */
+/* Cybersecurity Testing Suite Design System - Light theme with vivid accents */
 
 @layer base {
   :root {
-    /* Vivid cybersecurity theme */
-    --background: 210 30% 5%;
-    --foreground: 0 0% 100%;
+    /* Light cybersecurity theme */
+    --background: 0 0% 97%;
+    --foreground: 210 30% 15%;
 
-    --card: 210 30% 8%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 30% 15%;
 
-    --popover: 210 30% 8%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 30% 15%;
 
-    /* Electric cyan primary */
-    --primary: 180 100% 65%;
-    --primary-foreground: 210 30% 5%;
+    /* Electric blue primary */
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 30% 15%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 210 20% 92%;
+    --secondary-foreground: 210 30% 15%;
 
-    --muted: 210 30% 12%;
-    --muted-foreground: 210 15% 70%;
+    --muted: 210 15% 95%;
+    --muted-foreground: 210 20% 40%;
 
-    --accent: 280 100% 70%;
-    --accent-foreground: 210 30% 5%;
+    --accent: 280 85% 60%;
+    --accent-foreground: 0 0% 100%;
 
     /* Vivid security status colors */
-    --success: 120 100% 60%;
-    --success-foreground: 210 30% 5%;
+    --success: 120 60% 45%;
+    --success-foreground: 0 0% 100%;
     
-    --warning: 40 100% 65%;
-    --warning-foreground: 210 30% 5%;
+    --warning: 35 80% 50%;
+    --warning-foreground: 0 0% 100%;
     
-    --destructive: 0 100% 70%;
+    --destructive: 0 80% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 30% 25%;
-    --input: 210 30% 10%;
-    --ring: 180 100% 65%;
+    --border: 210 20% 85%;
+    --input: 210 15% 95%;
+    --ring: 210 100% 50%;
 
-    /* Vivid gradients for cyber theme */
-    --gradient-cyber: linear-gradient(135deg, hsl(180 100% 65%), hsl(280 100% 70%));
-    --gradient-success: linear-gradient(135deg, hsl(120 100% 60%), hsl(120 100% 50%));
-    --gradient-danger: linear-gradient(135deg, hsl(0 100% 70%), hsl(0 100% 60%));
-    --gradient-surface: linear-gradient(145deg, hsl(210 30% 8%), hsl(210 30% 5%));
+    /* Vivid gradients for light theme */
+    --gradient-cyber: linear-gradient(135deg, hsl(210 100% 50%), hsl(280 85% 60%));
+    --gradient-success: linear-gradient(135deg, hsl(120 60% 45%), hsl(120 70% 40%));
+    --gradient-danger: linear-gradient(135deg, hsl(0 80% 55%), hsl(0 85% 50%));
+    --gradient-surface: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 15% 95%));
     
     /* Enhanced glowing effects */
     --glow-primary: 0 0 30px hsl(180 100% 65% / 0.5);

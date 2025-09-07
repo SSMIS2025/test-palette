@@ -77,7 +77,16 @@ export const EndpointManager = () => {
   };
 
   const handleEdit = (endpoint: Endpoint) => {
-    setFormData({ ...endpoint });
+    setFormData({
+      name: endpoint.name,
+      url: endpoint.url,
+      method: endpoint.method,
+      headers: endpoint.headers || '',
+      body: endpoint.body || '',
+      description: endpoint.description || '',
+      category: endpoint.category,
+      priority: endpoint.priority
+    });
     setIsEditing(endpoint.id);
   };
 
@@ -154,11 +163,16 @@ export const EndpointManager = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="api">API</SelectItem>
-                    <SelectItem value="auth">Authentication</SelectItem>
+                    <SelectItem value="api">API Endpoints</SelectItem>
+                    <SelectItem value="web">Web Applications</SelectItem>
                     <SelectItem value="database">Database</SelectItem>
-                    <SelectItem value="file">File Upload</SelectItem>
-                    <SelectItem value="admin">Admin Panel</SelectItem>
+                    <SelectItem value="authentication">Authentication</SelectItem>
+                    <SelectItem value="file-upload">File Upload</SelectItem>
+                    <SelectItem value="payment">Payment Gateway</SelectItem>
+                    <SelectItem value="social">Social Media</SelectItem>
+                    <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                    <SelectItem value="third-party">Third Party Services</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Play, Pause, RotateCcw, Zap, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, AlertTriangle, CheckCircle, Clock, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStoredData, saveStoredData } from '@/lib/storage';
 import axios from 'axios';
@@ -64,15 +64,21 @@ export const TestRunner = () => {
         }
       }
 
+      // Use proxy to avoid CORS issues
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const targetUrl = endpoint.url.startsWith('http') ? endpoint.url : `https://${endpoint.url}`;
+      const requestUrl = `${proxyUrl}${encodeURIComponent(targetUrl)}`;
+
       // Prepare request config
       const config: any = {
         method: endpoint.method.toLowerCase(),
-        url: endpoint.url,
+        url: requestUrl,
         headers: {
           'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
           ...headers
         },
-        timeout: 10000,
+        timeout: 15000,
         validateStatus: () => true // Accept all status codes
       };
 
@@ -166,8 +172,8 @@ export const TestRunner = () => {
       newResults.push(result);
 
       // Update results in real-time
-      const updatedResults = [...testResults, ...newResults];
-      saveResults(updatedResults);
+      const allResults = [...testResults, ...newResults];
+      saveResults(allResults);
     }
 
     setCurrentTest(null);
@@ -204,6 +210,39 @@ export const TestRunner = () => {
     setTestResults([]);
     saveStoredData('testResults', []);
     toast.success('Test results cleared');
+  };
+
+  const downloadResultsCSV = () => {
+    if (testResults.length === 0) {
+      toast.error('No results to download');
+      return;
+    }
+
+    const headers = ['Endpoint Name', 'URL', 'Method', 'Status', 'Vulnerabilities', 'Response Time (ms)', 'Status Code', 'Timestamp'];
+    const csvContent = [
+      headers.join(','),
+      ...testResults.map(result => [
+        `"${result.endpointName}"`,
+        `"${result.url}"`,
+        result.method,
+        result.status,
+        `"${result.vulnerabilities.join('; ')}"`,
+        result.responseTime || 0,
+        result.statusCode || 0,
+        `"${new Date(result.timestamp).toLocaleString()}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `vulnerability-test-results-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Results downloaded successfully!');
   };
 
   const getStatusIcon = (status: string) => {
@@ -244,6 +283,15 @@ export const TestRunner = () => {
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Clear Results
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={downloadResultsCSV}
+              disabled={isRunning || testResults.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download CSV
             </Button>
 
             <div className="text-sm text-muted-foreground">
