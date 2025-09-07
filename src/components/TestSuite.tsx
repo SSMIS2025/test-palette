@@ -7,9 +7,13 @@ import { getStoredData } from '@/lib/storage';
 
 interface TestResult {
   id: string;
-  endpoint: string;
-  status: 'pass' | 'fail' | 'pending';
-  vulnerability?: string;
+  endpointName: string;
+  url: string;
+  method: string;
+  status: 'secure' | 'vulnerable' | 'error';
+  vulnerabilities: string[];
+  responseTime?: number;
+  statusCode?: number;
   timestamp: string;
 }
 
@@ -28,7 +32,7 @@ export const TestSuite = () => {
     
     const stats = results.reduce((acc: any, result: TestResult) => {
       acc.total++;
-      acc[result.status === 'pass' ? 'passed' : result.status === 'fail' ? 'failed' : 'pending']++;
+      acc[result.status === 'secure' ? 'passed' : result.status === 'vulnerable' ? 'failed' : 'pending']++;
       return acc;
     }, { total: 0, passed: 0, failed: 0, pending: 0 });
     
@@ -115,20 +119,32 @@ export const TestSuite = () => {
                   className="flex items-center justify-between p-4 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-matrix"
                 >
                   <div className="flex items-center gap-3">
-                    {result.status === 'pass' && <CheckCircle className="h-5 w-5 text-success" />}
-                    {result.status === 'fail' && <AlertTriangle className="h-5 w-5 text-destructive" />}
-                    {result.status === 'pending' && <Clock className="h-5 w-5 text-warning animate-spin" />}
+                    {result.status === 'secure' && <CheckCircle className="h-5 w-5 text-success" />}
+                    {result.status === 'vulnerable' && <AlertTriangle className="h-5 w-5 text-destructive" />}
+                    {result.status === 'error' && <Clock className="h-5 w-5 text-warning" />}
                     <div>
-                      <p className="font-mono text-sm font-medium">{result.endpoint}</p>
-                      {result.vulnerability && (
-                        <p className="text-sm text-destructive">{result.vulnerability}</p>
+                      <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{result.method} {result.url}</p>
+                      {result.vulnerabilities && result.vulnerabilities.length > 0 && (
+                        <div className="mt-1 space-y-1">
+                          {result.vulnerabilities.map((vuln, index) => (
+                            <p key={index} className="text-sm text-destructive font-semibold">
+                              🚨 {vuln}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {result.responseTime && result.statusCode && (
+                        <p className="text-xs text-muted-foreground">
+                          Response: {result.responseTime}ms | Status: {result.statusCode}
+                        </p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge
-                      variant={result.status === 'pass' ? 'default' : result.status === 'fail' ? 'destructive' : 'secondary'}
-                      className={result.status === 'pass' ? 'bg-success text-success-foreground' : ''}
+                      variant={result.status === 'secure' ? 'default' : result.status === 'vulnerable' ? 'destructive' : 'secondary'}
+                      className={result.status === 'secure' ? 'bg-success text-success-foreground' : ''}
                     >
                       {result.status.toUpperCase()}
                     </Badge>

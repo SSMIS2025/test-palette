@@ -43,11 +43,13 @@
     --input: 210 15% 95%;
     --ring: 210 100% 50%;
 
-    /* Vivid gradients for light theme */
+    /* Beautiful gradients for light theme */
     --gradient-cyber: linear-gradient(135deg, hsl(210 100% 50%), hsl(280 85% 60%));
-    --gradient-success: linear-gradient(135deg, hsl(120 60% 45%), hsl(120 70% 40%));
-    --gradient-danger: linear-gradient(135deg, hsl(0 80% 55%), hsl(0 85% 50%));
-    --gradient-surface: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 15% 95%));
+    --gradient-success: linear-gradient(135deg, hsl(120 60% 45%), hsl(160 70% 45%));
+    --gradient-danger: linear-gradient(135deg, hsl(0 80% 55%), hsl(15 85% 50%));
+    --gradient-surface: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 20% 98%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 30% 96%));
+    --gradient-background: linear-gradient(180deg, hsl(0 0% 98%), hsl(210 20% 95%));
     
     /* Enhanced glowing effects */
     --glow-primary: 0 0 30px hsl(180 100% 65% / 0.5);
@@ -84,6 +86,8 @@
 
   body {
     @apply bg-background text-foreground font-mono;
+    background: var(--gradient-background);
+    min-height: 100vh;
   }
 }
 
@@ -114,9 +118,19 @@
     background: var(--gradient-surface);
   }
   
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+  
+  .gradient-cyber {
+    background: var(--gradient-cyber);
+  }
+  
   .test-card {
-    @apply bg-card border border-border rounded-lg p-6 gradient-surface;
+    @apply bg-card border border-border rounded-lg p-6;
+    background: var(--gradient-card);
     transition: var(--transition-smooth);
+    backdrop-filter: blur(10px);
   }
   
   .test-card:hover {

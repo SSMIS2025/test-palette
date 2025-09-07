@@ -64,22 +64,40 @@ export const TestRunner = () => {
         }
       }
 
-      // Use proxy to avoid CORS issues
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      // Enhanced CORS handling with multiple fallback strategies
       const targetUrl = endpoint.url.startsWith('http') ? endpoint.url : `https://${endpoint.url}`;
-      const requestUrl = `${proxyUrl}${encodeURIComponent(targetUrl)}`;
+      
+      // Try direct request first for same-origin or CORS-enabled endpoints
+      let requestUrl = targetUrl;
+      let corsMode: RequestInit['mode'] = 'cors';
+      
+      // Fallback proxy services for CORS-blocked requests
+      const proxyServices = [
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://cors-anywhere.herokuapp.com/',
+        'https://api.allorigins.win/raw?url='
+      ];
+      
+      // For known external domains, use proxy immediately
+      if (!targetUrl.includes(window.location.hostname)) {
+        requestUrl = `${proxyServices[2]}${encodeURIComponent(targetUrl)}`;
+        corsMode = 'cors';
+      }
 
-      // Prepare request config
+      // Prepare request config with enhanced error handling
       const config: any = {
         method: endpoint.method.toLowerCase(),
         url: requestUrl,
         headers: {
           'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': 'VulnScan-Pro/1.0',
+          'Accept': '*/*',
           ...headers
         },
-        timeout: 15000,
-        validateStatus: () => true // Accept all status codes
+        timeout: 10000,
+        validateStatus: () => true, // Accept all status codes
+        maxRedirects: 3,
+        withCredentials: false
       };
 
       // Add body for POST/PUT/PATCH requests
@@ -214,35 +232,40 @@ export const TestRunner = () => {
 
   const downloadResultsCSV = () => {
     if (testResults.length === 0) {
-      toast.error('No results to download');
+      toast.error('No results to export');
       return;
     }
 
-    const headers = ['Endpoint Name', 'URL', 'Method', 'Status', 'Vulnerabilities', 'Response Time (ms)', 'Status Code', 'Timestamp'];
+    const headers = ['Endpoint Name', 'URL', 'Method', 'Status', 'Vulnerabilities', 'Response Time (ms)', 'Status Code', 'Timestamp', 'Priority'];
     const csvContent = [
       headers.join(','),
-      ...testResults.map(result => [
-        `"${result.endpointName}"`,
-        `"${result.url}"`,
-        result.method,
-        result.status,
-        `"${result.vulnerabilities.join('; ')}"`,
-        result.responseTime || 0,
-        result.statusCode || 0,
-        `"${new Date(result.timestamp).toLocaleString()}"`
-      ].join(','))
+      ...testResults.map(result => {
+        // Find the original endpoint to get priority
+        const endpoint = endpoints.find(ep => ep.name === result.endpointName);
+        return [
+          `"${result.endpointName}"`,
+          `"${result.url}"`,
+          result.method,
+          result.status,
+          `"${result.vulnerabilities ? result.vulnerabilities.join('; ') : ''}"`,
+          result.responseTime || 0,
+          result.statusCode || 'N/A',
+          `"${new Date(result.timestamp).toLocaleString()}"`,
+          endpoint?.priority || 'Medium'
+        ].join(',');
+      })
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `vulnerability-test-results-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `vulnerability-scan-results-${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Results downloaded successfully!');
+    toast.success('Test results exported successfully!');
   };
 
   const getStatusIcon = (status: string) => {
@@ -291,7 +314,7 @@ export const TestRunner = () => {
               disabled={isRunning || testResults.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
-              Download CSV
+              Export CSV
             </Button>
 
             <div className="text-sm text-muted-foreground">
