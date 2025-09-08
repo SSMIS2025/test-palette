@@ -4,8 +4,9 @@ import { EndpointManager } from '@/components/EndpointManager';
 import { TestRunner } from '@/components/TestRunner';
 import { PortScanner } from '@/components/PortScanner';
 import { ImportExport } from '@/components/ImportExport';
+import { ProjectManager } from '@/components/ProjectManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Target, Network, Database, FileUp } from 'lucide-react';
+import { Shield, Target, Network, Database, FileUp, FolderOpen } from 'lucide-react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -27,10 +28,14 @@ const Index = () => {
 
       {/* Main Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-card border border-border">
+        <TabsList className="grid w-full grid-cols-6 bg-card border border-border">
           <TabsTrigger value="dashboard" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="projects" className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            Projects
           </TabsTrigger>
           <TabsTrigger value="endpoints" className="flex items-center gap-2">
             <Target className="h-4 w-4" />
@@ -53,6 +58,10 @@ const Index = () => {
         <div className="mt-6">
           <TabsContent value="dashboard" className="space-y-6">
             <TestSuite />
+          </TabsContent>
+          
+          <TabsContent value="projects" className="space-y-6">
+            <ProjectManager onProjectSelect={() => {}} />
           </TabsContent>
           
           <TabsContent value="endpoints" className="space-y-6">
