@@ -140,7 +140,7 @@ export const ProjectManager = ({ selectedProject, onProjectSelect, showSelector 
 
   if (showSelector) {
     return (
-      <Card className="test-card mb-6">
+      <Card className="card-cyan mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5 text-primary" />
@@ -199,7 +199,7 @@ export const ProjectManager = ({ selectedProject, onProjectSelect, showSelector 
   return (
     <div className="space-y-6">
       {/* Project Form */}
-      <Card className="test-card">
+      <Card className="card-blue">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-primary" />
@@ -257,7 +257,7 @@ export const ProjectManager = ({ selectedProject, onProjectSelect, showSelector 
             </div>
             
             <div className="flex gap-2">
-              <Button type="submit" className="bg-gradient-primary">
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
                 {isEditing ? 'Update Project' : 'Create Project'}
               </Button>
               {isEditing && (
@@ -271,7 +271,7 @@ export const ProjectManager = ({ selectedProject, onProjectSelect, showSelector 
       </Card>
 
       {/* Projects List */}
-      <Card className="test-card">
+      <Card className="card-green">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5 text-primary" />

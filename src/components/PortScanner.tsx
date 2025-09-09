@@ -238,7 +238,7 @@ export const PortScanner = () => {
   return (
     <div className="space-y-6">
       {/* Scan Configuration */}
-      <Card className="test-card">
+      <Card className="card-purple">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Network className="h-5 w-5 text-primary animate-pulse-glow" />
@@ -377,7 +377,7 @@ export const PortScanner = () => {
       </Card>
 
       {/* Scan Results */}
-      <Card className="test-card">
+      <Card className="card-orange">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Wifi className="h-5 w-5 text-success" />

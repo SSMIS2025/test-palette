@@ -39,7 +39,7 @@ export const EndpointManager = () => {
     body: '',
     description: '',
     category: 'Authentication',
-    priority: 'medium' as const,
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     expectedStatusCode: 200,
     expectedResponse: ''
   });
@@ -180,7 +180,7 @@ export const EndpointManager = () => {
 
       {selectedProject ? (
         <>
-          <Card className="test-card">
+          <Card className="card-blue">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5 text-primary" />
@@ -294,7 +294,7 @@ export const EndpointManager = () => {
             </CardContent>
           </Card>
 
-          <Card className="test-card">
+          <Card className="card-green">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
@@ -362,7 +362,7 @@ export const EndpointManager = () => {
           </Card>
         </>
       ) : (
-        <Card className="test-card">
+        <Card className="card-purple">
           <CardContent className="text-center py-8">
             <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">Please select a project to manage endpoints</p>

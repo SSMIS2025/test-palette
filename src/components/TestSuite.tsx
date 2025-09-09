@@ -45,7 +45,7 @@ export const TestSuite = () => {
     <div className="space-y-6">
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="test-card">
+        <Card className="card-blue">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Tests</CardTitle>
             <Activity className="h-4 w-4 text-primary" />
@@ -58,7 +58,7 @@ export const TestSuite = () => {
           </CardContent>
         </Card>
 
-        <Card className="test-card">
+        <Card className="card-green">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Passed</CardTitle>
             <CheckCircle className="h-4 w-4 text-success" />
@@ -71,7 +71,7 @@ export const TestSuite = () => {
           </CardContent>
         </Card>
 
-        <Card className="test-card">
+        <Card className="card-red">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Failed</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -84,7 +84,7 @@ export const TestSuite = () => {
           </CardContent>
         </Card>
 
-        <Card className="test-card">
+        <Card className="card-purple">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
             <Shield className="h-4 w-4 text-primary" />
@@ -97,7 +97,7 @@ export const TestSuite = () => {
       </div>
 
       {/* Recent Test Results */}
-      <Card className="test-card">
+      <Card className="card-orange">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
