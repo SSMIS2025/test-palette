@@ -1,0 +1,8 @@
+Project Name,Endpoint Name,URL,Method,Headers,Body,Priority,Expected Status Code,Expected Content
+VulnScan Test Project,Login API,https://api.example.com/auth/login,POST,"{""Content-Type"": ""application/json""}","{""username"": ""test"", ""password"": ""test123""}",high,200,token
+VulnScan Test Project,User Profile,https://api.example.com/user/profile,GET,"{""Authorization"": ""Bearer token123""}","",medium,200,user
+VulnScan Test Project,Dashboard,https://example.com/dashboard,GET,"","",low,200,Dashboard
+E-commerce Project,Product List,https://shop.example.com/api/products,GET,"","",medium,200,products
+E-commerce Project,Add to Cart,https://shop.example.com/api/cart,POST,"{""Content-Type"": ""application/json""}","{""productId"": ""123"", ""quantity"": 1}",high,201,success
+Banking App,Account Balance,https://bank.example.com/balance,GET,"{""Authorization"": ""Bearer xyz789""}","",critical,200,balance
+Banking App,Transfer Funds,https://bank.example.com/transfer,POST,"{""Content-Type"": ""application/json"", ""Authorization"": ""Bearer xyz789""}","{""from"": ""123"", ""to"": ""456"", ""amount"": 100}",critical,200,transferred

@@ -80,13 +80,42 @@ export const TestRunner = () => {
   };
 
   const replaceIPAddress = (url: string, projectIP?: string) => {
-    if (!projectIP) return url;
+    if (!projectIP || !projectIP.trim()) return url;
+    
     try {
-      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-      urlObj.hostname = projectIP;
-      return urlObj.toString();
-    } catch {
-      return url.replace(/https?:\/\/[^\/]+/, `http://${projectIP}`);
+      // Handle URLs with protocol
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        const urlObj = new URL(url);
+        // Only replace if the hostname is not already an IP address or localhost
+        if (!urlObj.hostname.match(/^\d+\.\d+\.\d+\.\d+$/) || urlObj.hostname !== projectIP) {
+          urlObj.hostname = projectIP;
+        }
+        return urlObj.toString();
+      }
+      
+      // Handle URLs without protocol
+      if (url.includes('://')) {
+        return url; // Keep other protocols unchanged
+      }
+      
+      // Handle domain:port or domain/path format
+      const domainPortPath = url.split('/');
+      const domainPort = domainPortPath[0];
+      const pathPart = domainPortPath.slice(1).join('/');
+      
+      let newDomainPort;
+      if (domainPort.includes(':')) {
+        const [, port] = domainPort.split(':');
+        newDomainPort = `${projectIP}:${port}`;
+      } else {
+        newDomainPort = projectIP;
+      }
+      
+      return pathPart ? `${newDomainPort}/${pathPart}` : newDomainPort;
+      
+    } catch (error) {
+      console.warn('Error replacing IP address:', error);
+      return url;
     }
   };
 

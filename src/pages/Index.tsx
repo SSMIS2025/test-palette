@@ -29,27 +29,27 @@ const Index = () => {
       {/* Main Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-6 bg-card border border-border">
-          <TabsTrigger value="dashboard" className="flex items-center gap-2">
+          <TabsTrigger value="dashboard" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Shield className="h-4 w-4" />
             Dashboard
           </TabsTrigger>
-          <TabsTrigger value="projects" className="flex items-center gap-2">
+          <TabsTrigger value="projects" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <FolderOpen className="h-4 w-4" />
             Projects
           </TabsTrigger>
-          <TabsTrigger value="endpoints" className="flex items-center gap-2">
+          <TabsTrigger value="endpoints" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Target className="h-4 w-4" />
             Endpoints
           </TabsTrigger>
-          <TabsTrigger value="scanner" className="flex items-center gap-2">
+          <TabsTrigger value="scanner" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Network className="h-4 w-4" />
             Scanner
           </TabsTrigger>
-          <TabsTrigger value="ports" className="flex items-center gap-2">
+          <TabsTrigger value="ports" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Database className="h-4 w-4" />
             Ports
           </TabsTrigger>
-          <TabsTrigger value="import" className="flex items-center gap-2">
+          <TabsTrigger value="import" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <FileUp className="h-4 w-4" />
             Import/Export
           </TabsTrigger>
