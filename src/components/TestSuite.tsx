@@ -113,7 +113,7 @@ export const TestSuite = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {testResults.slice(-5).reverse().map((result) => (
+              {testResults.slice(-10).reverse().map((result) => (
                 <div
                   key={result.id}
                   className="flex items-center justify-between p-4 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-matrix"

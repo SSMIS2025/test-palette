@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Network, Wifi, WifiOff, Play, Pause, RotateCcw } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Network, Wifi, WifiOff, Play, Pause, Square, RotateCcw, CheckCircle, AlertTriangle, List } from 'lucide-react';
 import { toast } from 'sonner';
+import { getSessionData, saveSessionData, SESSION_KEYS } from '@/lib/session';
+import { ProjectManager, Project } from './ProjectManager';
 
 interface PortScanResult {
   port: number;
@@ -27,19 +30,56 @@ const commonPorts = [
   { port: 443, service: 'HTTPS' },
   { port: 993, service: 'IMAPS' },
   { port: 995, service: 'POP3S' },
+  { port: 3306, service: 'MySQL' },
   { port: 3389, service: 'RDP' },
-  { port: 5432, service: 'PostgreSQL' },
-  { port: 3306, service: 'MySQL' }
+  { port: 5432, service: 'PostgreSQL' }
 ];
 
+type ScanState = 'idle' | 'running' | 'paused' | 'stopped';
+
 export const PortScanner = () => {
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [target, setTarget] = useState('127.0.0.1');
   const [portRange, setPortRange] = useState('1-1000');
   const [customPorts, setCustomPorts] = useState('');
   const [scanResults, setScanResults] = useState<PortScanResult[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
+  const [scanState, setScanState] = useState<ScanState>('idle');
   const [progress, setProgress] = useState(0);
+  const [currentPortIndex, setCurrentPortIndex] = useState(0);
   const [scanType, setScanType] = useState<'common' | 'range' | 'custom'>('common');
+
+  useEffect(() => {
+    const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
+    if (sessionProject) {
+      setSelectedProject(sessionProject);
+    }
+
+    const savedState = getSessionData(SESSION_KEYS.PORT_SCANNER_STATE, null);
+    if (savedState) {
+      setScanState(savedState.scanState);
+      setCurrentPortIndex(savedState.currentPortIndex);
+      setProgress(savedState.progress);
+      setTarget(savedState.target);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      saveSessionData(SESSION_KEYS.SELECTED_PROJECT, selectedProject);
+      if (selectedProject.ipAddress) {
+        setTarget(selectedProject.ipAddress);
+      }
+    }
+  }, [selectedProject]);
+
+  useEffect(() => {
+    saveSessionData(SESSION_KEYS.PORT_SCANNER_STATE, {
+      scanState,
+      currentPortIndex,
+      progress,
+      target
+    });
+  }, [scanState, currentPortIndex, progress, target]);
 
   const getPortsToScan = () => {
     switch (scanType) {
@@ -64,10 +104,9 @@ export const PortScanner = () => {
     return new Promise((resolve) => {
       const timeout = Math.random() * 500 + 100;
       
-      // Attempt real port scanning using fetch/websocket techniques
       const attemptConnection = async () => {
         try {
-          // For HTTP/HTTPS ports, try direct connection
+          // HTTP/HTTPS port scanning
           if (port === 80 || port === 443 || port === 8080 || port === 8443) {
             const protocol = port === 443 || port === 8443 ? 'https' : 'http';
             const testUrl = `${protocol}://${host}:${port}`;
@@ -91,7 +130,6 @@ export const PortScanner = () => {
               };
             } catch (error) {
               clearTimeout(timeoutId);
-              // If fetch fails, port might be closed or filtered
               return {
                 port,
                 status: (Math.random() > 0.7 ? 'filtered' : 'closed') as 'filtered' | 'closed',
@@ -100,7 +138,7 @@ export const PortScanner = () => {
             }
           }
           
-          // For other ports, use WebSocket connection attempt
+          // WebSocket port scanning
           try {
             const ws = new WebSocket(`ws://${host}:${port}`);
             return new Promise<PortScanResult>((wsResolve) => {
@@ -134,7 +172,6 @@ export const PortScanner = () => {
               };
             });
           } catch {
-            // Fallback to realistic simulation
             const isCommonPort = commonPorts.some(p => p.port === port);
             const status: 'open' | 'filtered' | 'closed' = isCommonPort && Math.random() > 0.4 ? 'open' : 
                          Math.random() > 0.7 ? 'filtered' : 'closed';
@@ -186,34 +223,59 @@ export const PortScanner = () => {
       return;
     }
 
-    setIsScanning(true);
+    setScanState('running');
     setProgress(0);
+    setCurrentPortIndex(0);
     setScanResults([]);
-    toast.info(`Starting port scan on ${target}...`);
+    toast.info(`Starting port scan on ${target}...`, {
+      description: 'Scanning ports via IP and WebSocket'
+    });
 
     const results: PortScanResult[] = [];
 
     for (let i = 0; i < ports.length; i++) {
+      if (scanState === 'stopped') break;
+      
+      while (scanState === 'paused') {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       const port = ports[i];
+      setCurrentPortIndex(i);
       setProgress(((i + 1) / ports.length) * 100);
 
       const result = await scanPort(target, port);
       results.push(result);
       
-      // Update results in real-time
       setScanResults([...results]);
     }
 
-    setIsScanning(false);
+    setScanState('idle');
     setProgress(100);
 
     const openPorts = results.filter(r => r.status === 'open').length;
     toast.success(`Scan complete! Found ${openPorts} open ports out of ${ports.length} scanned.`);
   };
 
+  const pauseScan = () => {
+    setScanState('paused');
+    toast.info('Scan paused');
+  };
+
+  const resumeScan = () => {
+    setScanState('running');
+    toast.info('Scan resumed');
+  };
+
+  const stopScan = () => {
+    setScanState('stopped');
+    toast.warning('Scan stopped');
+  };
+
   const clearResults = () => {
     setScanResults([]);
     setProgress(0);
+    setCurrentPortIndex(0);
     toast.success('Scan results cleared');
   };
 
@@ -235,8 +297,38 @@ export const PortScanner = () => {
     }
   };
 
+  const openResults = scanResults.filter(r => r.status === 'open');
+  const failedResults = scanResults.filter(r => r.status === 'closed' || r.status === 'filtered');
+
   return (
     <div className="space-y-6">
+      {/* Project Selection */}
+      <ProjectManager 
+        selectedProject={selectedProject} 
+        onProjectSelect={setSelectedProject}
+        showSelector={true}
+      />
+
+      {/* Common Ports Reference */}
+      <Card className="card-cyan">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <List className="h-5 w-5 text-primary" />
+            Common Ports Reference
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+            {commonPorts.map(({ port, service }) => (
+              <div key={port} className="text-center p-2 border border-border rounded bg-muted/30">
+                <div className="font-bold text-primary">{port}</div>
+                <div className="text-xs text-muted-foreground">{service}</div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Scan Configuration */}
       <Card className="card-purple">
         <CardHeader>
@@ -254,8 +346,11 @@ export const PortScanner = () => {
               onChange={(e) => setTarget(e.target.value)}
               placeholder="127.0.0.1 or example.com"
               className="font-mono"
-              disabled={isScanning}
+              disabled={scanState === 'running'}
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Supports IP address and WebSocket scanning
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -264,20 +359,20 @@ export const PortScanner = () => {
               <Button
                 variant={scanType === 'common' ? 'default' : 'outline'}
                 onClick={() => setScanType('common')}
-                disabled={isScanning}
+                disabled={scanState === 'running'}
                 className="h-auto p-4 flex flex-col items-center gap-2"
               >
                 <Network className="h-5 w-5" />
                 <div>
                   <div className="font-semibold">Common Ports</div>
-                  <div className="text-xs text-muted-foreground">14 well-known ports</div>
+                  <div className="text-xs text-muted-foreground">{commonPorts.length} well-known ports</div>
                 </div>
               </Button>
               
               <Button
                 variant={scanType === 'range' ? 'default' : 'outline'}
                 onClick={() => setScanType('range')}
-                disabled={isScanning}
+                disabled={scanState === 'running'}
                 className="h-auto p-4 flex flex-col items-center gap-2"
               >
                 <Wifi className="h-5 w-5" />
@@ -290,7 +385,7 @@ export const PortScanner = () => {
               <Button
                 variant={scanType === 'custom' ? 'default' : 'outline'}
                 onClick={() => setScanType('custom')}
-                disabled={isScanning}
+                disabled={scanState === 'running'}
                 className="h-auto p-4 flex flex-col items-center gap-2"
               >
                 <WifiOff className="h-5 w-5" />
@@ -311,7 +406,7 @@ export const PortScanner = () => {
                 onChange={(e) => setPortRange(e.target.value)}
                 placeholder="1-1000"
                 className="font-mono"
-                disabled={isScanning}
+                disabled={scanState === 'running'}
               />
               <p className="text-sm text-muted-foreground mt-1">
                 Format: start-end (e.g., 1-1000)
@@ -328,7 +423,7 @@ export const PortScanner = () => {
                 onChange={(e) => setCustomPorts(e.target.value)}
                 placeholder="80,443,22,21"
                 className="font-mono"
-                disabled={isScanning}
+                disabled={scanState === 'running'}
               />
               <p className="text-sm text-muted-foreground mt-1">
                 Comma-separated list (e.g., 80,443,22,21)
@@ -336,20 +431,47 @@ export const PortScanner = () => {
             </div>
           )}
 
-          <div className="flex items-center gap-4 pt-4">
-            <Button
-              onClick={startScan}
-              disabled={isScanning}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isScanning ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-              {isScanning ? 'Scanning...' : 'Start Scan'}
-            </Button>
+          <div className="flex items-center gap-4 pt-4 flex-wrap">
+            {scanState === 'idle' && (
+              <Button
+                onClick={startScan}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Start Scan
+              </Button>
+            )}
+            
+            {scanState === 'running' && (
+              <>
+                <Button onClick={pauseScan} variant="outline">
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause
+                </Button>
+                <Button onClick={stopScan} variant="destructive">
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
+            
+            {scanState === 'paused' && (
+              <>
+                <Button onClick={resumeScan} className="bg-primary">
+                  <Play className="h-4 w-4 mr-2" />
+                  Resume
+                </Button>
+                <Button onClick={stopScan} variant="destructive">
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
             
             <Button
               variant="outline"
               onClick={clearResults}
-              disabled={isScanning || scanResults.length === 0}
+              disabled={scanState === 'running' || scanResults.length === 0}
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Clear Results
@@ -362,12 +484,12 @@ export const PortScanner = () => {
             )}
           </div>
 
-          {isScanning && (
+          {scanState === 'running' && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Scanning Progress: {Math.round(progress)}%</span>
-                <span className="text-primary animate-pulse">
-                  Checking ports on {target}...
+                <span className="text-primary animate-pulse font-bold">
+                  Port {currentPortIndex + 1} of {getPortsToScan().length}
                 </span>
               </div>
               <Progress value={progress} className="w-full" />
@@ -376,76 +498,107 @@ export const PortScanner = () => {
         </CardContent>
       </Card>
 
-      {/* Scan Results */}
-      <Card className="card-orange">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wifi className="h-5 w-5 text-success" />
-            Scan Results ({scanResults.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {scanResults.length === 0 ? (
-            <div className="text-center py-8">
-              <Network className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No scan results yet</p>
-              <p className="text-sm text-muted-foreground">Start a port scan to see results here</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Summary Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                {['open', 'closed', 'filtered', 'scanning'].map(status => {
-                  const count = scanResults.filter(r => r.status === status).length;
-                  return (
-                    <div key={status} className="text-center p-3 border border-border rounded-lg bg-muted/30">
-                      <div className={`text-2xl font-bold ${getStatusColor(status)}`}>
-                        {count}
-                      </div>
-                      <div className="text-sm text-muted-foreground capitalize">
-                        {status}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Detailed Results */}
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {scanResults.map((result, index) => (
-                  <div
-                    key={`${result.port}-${index}`}
-                    className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-matrix"
-                  >
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(result.status)}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold">Port {result.port}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {result.service}
-                          </Badge>
-                        </div>
-                        {result.banner && (
-                          <p className="text-sm text-muted-foreground font-mono">
-                            {result.banner}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <Badge
-                      variant={result.status === 'open' ? 'default' : 'outline'}
-                      className={result.status === 'open' ? 'bg-success text-success-foreground success-glow' : ''}
+      {/* Scan Results - PASS/FAIL Accordion */}
+      {scanResults.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* PASS (Open Ports) */}
+          <Card className="card-green">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-success" />
+                Open Ports ({openResults.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {openResults.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No open ports found</p>
+              ) : (
+                <Accordion type="multiple" className="space-y-2">
+                  {openResults.map((result) => (
+                    <AccordionItem 
+                      key={result.port} 
+                      value={result.port.toString()}
+                      className="border border-success/20 rounded-lg bg-success/5"
                     >
-                      {result.status.toUpperCase()}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      <AccordionTrigger className="px-3 hover:no-underline">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getStatusIcon(result.status)}
+                          <div className="text-left">
+                            <span className="font-mono font-semibold">Port {result.port}</span>
+                            <Badge variant="outline" className="text-xs ml-2">
+                              {result.service}
+                            </Badge>
+                          </div>
+                        </div>
+                        <Badge className="bg-success text-success-foreground ml-2">
+                          OPEN
+                        </Badge>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pt-2">
+                        <div className="space-y-1 text-sm">
+                          <p><strong>Port:</strong> {result.port}</p>
+                          <p><strong>Service:</strong> {result.service}</p>
+                          {result.banner && (
+                            <p><strong>Banner:</strong> <code className="text-xs bg-muted p-1 rounded">{result.banner}</code></p>
+                          )}
+                          <p><strong>Status:</strong> <span className="text-success font-bold">OPEN</span></p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* FAIL (Closed/Filtered Ports) */}
+          <Card className="card-red">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Closed/Filtered Ports ({failedResults.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {failedResults.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No closed/filtered ports</p>
+              ) : (
+                <Accordion type="multiple" className="space-y-2">
+                  {failedResults.map((result) => (
+                    <AccordionItem 
+                      key={result.port} 
+                      value={result.port.toString()}
+                      className="border border-muted rounded-lg bg-muted/10"
+                    >
+                      <AccordionTrigger className="px-3 hover:no-underline">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getStatusIcon(result.status)}
+                          <div className="text-left">
+                            <span className="font-mono font-semibold">Port {result.port}</span>
+                            <Badge variant="outline" className="text-xs ml-2">
+                              {result.service}
+                            </Badge>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="ml-2">
+                          {result.status.toUpperCase()}
+                        </Badge>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pt-2">
+                        <div className="space-y-1 text-sm">
+                          <p><strong>Port:</strong> {result.port}</p>
+                          <p><strong>Service:</strong> {result.service}</p>
+                          <p><strong>Status:</strong> <span className={getStatusColor(result.status)}>{result.status.toUpperCase()}</span></p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

@@ -26,12 +26,21 @@ export const removeStoredData = (key: string) => {
   }
 };
 
-// Export data to JSON file
-export const exportToJSON = (data: any, filename: string) => {
-  const dataStr = JSON.stringify(data, null, 2);
+// Export data to JSON file with project context
+export const exportToJSON = (data: any, filename: string, projectName?: string) => {
+  // Add project name to the exported data
+  const exportData = projectName ? {
+    projectName,
+    exportDate: new Date().toISOString(),
+    data
+  } : data;
+  
+  const dataStr = JSON.stringify(exportData, null, 2);
   const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
   
-  const exportFileDefaultName = `${filename}_${new Date().toISOString().split('T')[0]}.json`;
+  const exportFileDefaultName = projectName 
+    ? `${projectName}-${filename}_${new Date().toISOString().split('T')[0]}.json`
+    : `${filename}_${new Date().toISOString().split('T')[0]}.json`;
   
   const linkElement = document.createElement('a');
   linkElement.setAttribute('href', dataUri);

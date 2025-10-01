@@ -6,9 +6,11 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Play, Pause, RotateCcw, Zap, AlertTriangle, CheckCircle, Clock, Download, Settings, FolderOpen } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Play, Pause, Square, RotateCcw, Zap, AlertTriangle, CheckCircle, Clock, Download, Settings, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStoredData, saveStoredData } from '@/lib/storage';
+import { getSessionData, saveSessionData, SESSION_KEYS } from '@/lib/session';
 import { ProjectManager, Project } from './ProjectManager';
 import axios from 'axios';
 
@@ -45,13 +47,16 @@ interface TestConfig {
   checkContent: boolean;
 }
 
+type TestState = 'idle' | 'running' | 'paused' | 'stopped';
+
 export const TestRunner = () => {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
+  const [testState, setTestState] = useState<TestState>('idle');
   const [currentTest, setCurrentTest] = useState<string | null>(null);
+  const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [testConfig, setTestConfig] = useState<TestConfig>({
     projectId: '',
@@ -59,15 +64,58 @@ export const TestRunner = () => {
     checkContent: false
   });
   const [showConfig, setShowConfig] = useState(false);
+  const [summary, setSummary] = useState({ total: 0, pass: 0, fail: 0, notStarted: 0 });
 
   useEffect(() => {
     const storedEndpoints = getStoredData('endpoints', []);
     const storedProjects = getStoredData('projects', []);
     const storedResults = getStoredData('testResults', []);
+    const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
+    
     setEndpoints(storedEndpoints);
     setProjects(storedProjects);
     setTestResults(storedResults);
+    
+    if (sessionProject) {
+      const project = storedProjects.find((p: Project) => p.id === sessionProject.id);
+      if (project) setSelectedProject(project);
+    }
+
+    // Restore session state
+    const savedState = getSessionData(SESSION_KEYS.SCANNER_STATE, null);
+    if (savedState) {
+      setTestState(savedState.testState);
+      setCurrentTestIndex(savedState.currentTestIndex);
+      setProgress(savedState.progress);
+    }
   }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      saveSessionData(SESSION_KEYS.SELECTED_PROJECT, selectedProject);
+    }
+  }, [selectedProject]);
+
+  useEffect(() => {
+    // Save scanner state to session
+    saveSessionData(SESSION_KEYS.SCANNER_STATE, {
+      testState,
+      currentTestIndex,
+      progress
+    });
+  }, [testState, currentTestIndex, progress]);
+
+  useEffect(() => {
+    // Update summary stats
+    const projectEndpoints = getProjectEndpoints();
+    const projectResults = testResults.filter(r => r.projectId === selectedProject?.id);
+    setSummary({
+      total: projectEndpoints.length,
+      pass: projectResults.filter(r => r.status === 'pass').length,
+      fail: projectResults.filter(r => r.status === 'fail' || r.status === 'error').length,
+      notStarted: Math.max(0, projectEndpoints.length - projectResults.length)
+    });
+  }, [endpoints, testResults, selectedProject]);
 
   const saveResults = (newResults: TestResult[]) => {
     setTestResults(newResults);
@@ -83,22 +131,18 @@ export const TestRunner = () => {
     if (!projectIP || !projectIP.trim()) return url;
     
     try {
-      // Handle URLs with protocol
       if (url.startsWith('http://') || url.startsWith('https://')) {
         const urlObj = new URL(url);
-        // Only replace if the hostname is not already an IP address or localhost
         if (!urlObj.hostname.match(/^\d+\.\d+\.\d+\.\d+$/) || urlObj.hostname !== projectIP) {
           urlObj.hostname = projectIP;
         }
         return urlObj.toString();
       }
       
-      // Handle URLs without protocol
       if (url.includes('://')) {
-        return url; // Keep other protocols unchanged
+        return url;
       }
       
-      // Handle domain:port or domain/path format
       const domainPortPath = url.split('/');
       const domainPort = domainPortPath[0];
       const pathPart = domainPortPath.slice(1).join('/');
@@ -124,7 +168,6 @@ export const TestRunner = () => {
     setCurrentTest(endpoint.id);
     
     try {
-      // Replace IP if project has one configured
       const finalUrl = replaceIPAddress(endpoint.url, selectedProject?.ipAddress);
       
       let headers = {};
@@ -138,7 +181,6 @@ export const TestRunner = () => {
 
       const targetUrl = finalUrl.startsWith('http') ? finalUrl : `https://${finalUrl}`;
       
-      // CORS handling with multiple proxy services
       const proxyServices = [
         'https://api.codetabs.com/v1/proxy?quest=',
         'https://cors-anywhere.herokuapp.com/',
@@ -177,17 +219,14 @@ export const TestRunner = () => {
       const responseTime = Date.now() - startTime;
       const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
 
-      // Determine pass/fail based on expected status code and content
       let status: 'pass' | 'fail' | 'error' = 'pass';
       const vulnerabilities = [];
 
-      // Check expected status code
       if (endpoint.expectedStatusCode && response.status !== endpoint.expectedStatusCode) {
         status = 'fail';
         vulnerabilities.push(`Expected status ${endpoint.expectedStatusCode}, got ${response.status}`);
       }
 
-      // Check expected content if configured
       if (testConfig.checkContent && testConfig.expectedContent) {
         if (!responseText.includes(testConfig.expectedContent)) {
           status = 'fail';
@@ -195,7 +234,6 @@ export const TestRunner = () => {
         }
       }
 
-      // Security vulnerability checks
       if (!response.headers['x-content-type-options']) {
         vulnerabilities.push('Missing X-Content-Type-Options header');
       }
@@ -262,15 +300,25 @@ export const TestRunner = () => {
       return;
     }
 
-    setIsRunning(true);
+    setTestState('running');
     setProgress(0);
-    toast.info(`Starting tests for project: ${selectedProject.name}`);
+    setCurrentTestIndex(0);
+    toast.info(`Starting tests for project: ${selectedProject.name}`, {
+      description: 'Tests are being validated in the background'
+    });
 
     const newResults: TestResult[] = [];
 
     for (let i = 0; i < projectEndpoints.length; i++) {
+      if (testState === 'stopped') break;
+      
+      while (testState === 'paused') {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       const endpoint = projectEndpoints[i];
       setCurrentTest(endpoint.id);
+      setCurrentTestIndex(i);
       setProgress(((i + 1) / projectEndpoints.length) * 100);
 
       const result = await runSingleTest(endpoint);
@@ -281,7 +329,7 @@ export const TestRunner = () => {
     }
 
     setCurrentTest(null);
-    setIsRunning(false);
+    setTestState('idle');
     setProgress(100);
 
     const passCount = newResults.filter(r => r.status === 'pass').length;
@@ -295,14 +343,14 @@ export const TestRunner = () => {
   };
 
   const runSingleEndpointTest = async (endpoint: Endpoint) => {
-    setIsRunning(true);
+    setTestState('running');
     toast.info(`Testing ${endpoint.name}...`);
 
     const result = await runSingleTest(endpoint);
     const updatedResults = [...testResults, result];
     saveResults(updatedResults);
 
-    setIsRunning(false);
+    setTestState('idle');
     setCurrentTest(null);
 
     if (result.status === 'fail' || result.status === 'error') {
@@ -310,6 +358,22 @@ export const TestRunner = () => {
     } else {
       toast.success('Test passed!');
     }
+  };
+
+  const pauseTests = () => {
+    setTestState('paused');
+    toast.info('Tests paused');
+  };
+
+  const resumeTests = () => {
+    setTestState('running');
+    toast.info('Tests resumed');
+  };
+
+  const stopTests = () => {
+    setTestState('stopped');
+    setCurrentTest(null);
+    toast.warning('Tests stopped');
   };
 
   const clearResults = () => {
@@ -380,6 +444,45 @@ export const TestRunner = () => {
         showSelector={true}
       />
 
+      {/* Test Summary Stats */}
+      {selectedProject && (
+        <Card className="card-cyan">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary animate-pulse-glow" />
+              Test Suite Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 border border-border rounded-lg bg-primary/10">
+                <div className="text-3xl font-bold text-primary">{summary.total}</div>
+                <div className="text-sm text-muted-foreground">Total Tests</div>
+              </div>
+              <div className="text-center p-4 border border-border rounded-lg bg-success/10">
+                <div className="text-3xl font-bold text-success">{summary.pass}</div>
+                <div className="text-sm text-muted-foreground">Pass</div>
+              </div>
+              <div className="text-center p-4 border border-border rounded-lg bg-destructive/10">
+                <div className="text-3xl font-bold text-destructive">{summary.fail}</div>
+                <div className="text-sm text-muted-foreground">Fail</div>
+              </div>
+              <div className="text-center p-4 border border-border rounded-lg bg-muted/30">
+                <div className="text-3xl font-bold text-muted-foreground">{summary.notStarted}</div>
+                <div className="text-sm text-muted-foreground">Not Started</div>
+              </div>
+            </div>
+            {testState === 'running' && (
+              <div className="mt-4 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                <p className="text-sm font-bold text-warning">
+                  🔄 Test cases are being validated in the background...
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Test Configuration */}
       <Card className="card-purple">
         <CardHeader>
@@ -433,20 +536,48 @@ export const TestRunner = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 mb-4">
-            <Button
-              onClick={runAllTests}
-              disabled={isRunning || !selectedProject || getProjectEndpoints().length === 0}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isRunning ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-              {isRunning ? 'Running...' : 'Run All Tests'}
-            </Button>
+          <div className="flex items-center gap-4 mb-4 flex-wrap">
+            {testState === 'idle' && (
+              <Button
+                onClick={runAllTests}
+                disabled={!selectedProject || getProjectEndpoints().length === 0}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Run All Tests
+              </Button>
+            )}
+            
+            {testState === 'running' && (
+              <>
+                <Button onClick={pauseTests} variant="outline">
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause
+                </Button>
+                <Button onClick={stopTests} variant="destructive">
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
+            
+            {testState === 'paused' && (
+              <>
+                <Button onClick={resumeTests} className="bg-primary">
+                  <Play className="h-4 w-4 mr-2" />
+                  Resume
+                </Button>
+                <Button onClick={stopTests} variant="destructive">
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
             
             <Button
               variant="outline"
               onClick={clearResults}
-              disabled={isRunning || projectResults.length === 0}
+              disabled={testState === 'running' || projectResults.length === 0}
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Clear Results
@@ -455,7 +586,7 @@ export const TestRunner = () => {
             <Button
               variant="outline"
               onClick={downloadResultsCSV}
-              disabled={isRunning || projectResults.length === 0}
+              disabled={testState === 'running' || projectResults.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
               Export CSV
@@ -466,13 +597,13 @@ export const TestRunner = () => {
             </div>
           </div>
 
-          {isRunning && (
+          {testState === 'running' && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Progress: {Math.round(progress)}%</span>
                 {currentTest && (
-                  <span className="text-primary animate-pulse">
-                    Testing endpoint...
+                  <span className="text-primary animate-pulse font-bold">
+                    Testing endpoint {currentTestIndex + 1} of {getProjectEndpoints().length}...
                   </span>
                 )}
               </div>
@@ -485,9 +616,16 @@ export const TestRunner = () => {
       {/* Individual Endpoint Tests */}
       <Card className="card-green">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Play className="h-5 w-5 text-primary" />
-            Individual Tests
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-primary" />
+              Individual Run Test
+            </div>
+            {testState === 'running' && currentTest && (
+              <Badge variant="secondary" className="text-sm">
+                Running: {currentTestIndex + 1} / {getProjectEndpoints().length}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -500,61 +638,81 @@ export const TestRunner = () => {
               <p className="text-sm text-muted-foreground">Configure endpoints for this project first</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {getProjectEndpoints().map((endpoint) => (
-                <div
-                  key={endpoint.id}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-semibold">{endpoint.name}</h3>
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {endpoint.method}
-                      </Badge>
-                      <Badge className={`${endpoint.priority === 'critical' ? 'text-destructive' : 
-                        endpoint.priority === 'high' ? 'text-warning' : 'text-primary'}`}>
-                        {endpoint.priority}
-                      </Badge>
-                      {endpoint.expectedStatusCode && (
-                        <Badge variant="secondary" className="text-xs">
-                          Expects: {endpoint.expectedStatusCode}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="font-mono text-sm text-muted-foreground">
-                      {selectedProject?.ipAddress ? replaceIPAddress(endpoint.url, selectedProject.ipAddress) : endpoint.url}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => runSingleEndpointTest(endpoint)}
-                    disabled={isRunning}
-                    className="bg-primary hover:bg-primary/90"
+            <Accordion type="multiple" className="space-y-3">
+              {getProjectEndpoints().map((endpoint) => {
+                const isCurrentlyTesting = currentTest === endpoint.id;
+                return (
+                  <AccordionItem 
+                    key={endpoint.id} 
+                    value={endpoint.id}
+                    className={`border rounded-lg ${isCurrentlyTesting ? 'bg-warning/10 border-warning' : 'border-border'}`}
                   >
-                    {currentTest === endpoint.id ? (
-                      <>
-                        <Clock className="h-4 w-4 mr-2 animate-spin" />
-                        Testing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Test
-                      </>
-                    )}
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex items-center justify-between w-full pr-4">
+                        <div className="flex-1 text-left">
+                          <div className="flex items-center gap-3 mb-1">
+                            {isCurrentlyTesting && <Clock className="h-4 w-4 text-warning animate-spin" />}
+                            <h3 className="font-semibold">{endpoint.name}</h3>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {endpoint.method}
+                            </Badge>
+                            <Badge className={`${endpoint.priority === 'critical' ? 'text-destructive' : 
+                              endpoint.priority === 'high' ? 'text-warning' : 'text-primary'}`}>
+                              {endpoint.priority}
+                            </Badge>
+                            {endpoint.expectedStatusCode && (
+                              <Badge variant="secondary" className="text-xs">
+                                Expects: {endpoint.expectedStatusCode}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="font-mono text-sm text-muted-foreground">
+                            {selectedProject?.ipAddress ? replaceIPAddress(endpoint.url, selectedProject.ipAddress) : endpoint.url}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            runSingleEndpointTest(endpoint);
+                          }}
+                          disabled={testState === 'running'}
+                          className="bg-primary hover:bg-primary/90"
+                        >
+                          {isCurrentlyTesting ? (
+                            <>
+                              <Clock className="h-4 w-4 mr-2 animate-spin" />
+                              Testing...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4 mr-2" />
+                              Test
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pt-2">
+                      <div className="space-y-2 text-sm">
+                        <div><strong>Method:</strong> {endpoint.method}</div>
+                        <div><strong>Priority:</strong> {endpoint.priority}</div>
+                        {endpoint.headers && <div><strong>Headers:</strong> <code className="text-xs bg-muted p-1 rounded">{endpoint.headers}</code></div>}
+                        {endpoint.body && <div><strong>Body:</strong> <code className="text-xs bg-muted p-1 rounded">{endpoint.body}</code></div>}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           )}
         </CardContent>
       </Card>
 
-      {/* Test Results - PASS/FAIL Categories */}
+      {/* Test Results - PASS/FAIL Accordion Categories */}
       {projectResults.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* PASS Results */}
+          {/* PASS Results Accordion */}
           <Card className="card-green">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -563,36 +721,40 @@ export const TestRunner = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {passResults.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No passing tests yet</p>
-                ) : (
-                  passResults.slice().reverse().map((result) => (
-                    <div
-                      key={result.id}
-                      className="flex items-center justify-between p-3 border border-success/20 rounded-lg bg-success/5"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        {getStatusIcon(result.status)}
-                        <div>
-                          <p className="font-mono text-sm font-medium">{result.endpointName}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{result.method} {result.url}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Response: {result.responseTime}ms | Status: {result.statusCode}
-                          </p>
+              {passResults.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No passing tests yet</p>
+              ) : (
+                <Accordion type="multiple" className="space-y-2">
+                  {passResults.slice().reverse().map((result) => (
+                    <AccordionItem key={result.id} value={result.id} className="border border-success/20 rounded-lg bg-success/5">
+                      <AccordionTrigger className="px-3 hover:no-underline">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getStatusIcon(result.status)}
+                          <div className="text-left">
+                            <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
+                          </div>
                         </div>
-                      </div>
-                      <Badge className="bg-success text-success-foreground">
-                        PASS
-                      </Badge>
-                    </div>
-                  ))
-                )}
-              </div>
+                        <Badge className="bg-success text-success-foreground ml-2">
+                          PASS
+                        </Badge>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pt-2">
+                        <div className="space-y-1 text-sm">
+                          <p><strong>URL:</strong> {result.url}</p>
+                          <p><strong>Response Time:</strong> {result.responseTime}ms</p>
+                          <p><strong>Status Code:</strong> {result.statusCode}</p>
+                          <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
 
-          {/* FAIL Results */}
+          {/* FAIL Results Accordion */}
           <Card className="card-red">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -601,41 +763,48 @@ export const TestRunner = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {failResults.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No failed tests</p>
-                ) : (
-                  failResults.slice().reverse().map((result) => (
-                    <div
-                      key={result.id}
-                      className="flex items-center justify-between p-3 border border-destructive/20 rounded-lg bg-destructive/5"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        {getStatusIcon(result.status)}
-                        <div>
-                          <p className="font-mono text-sm font-medium">{result.endpointName}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{result.method} {result.url}</p>
+              {failResults.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No failed tests</p>
+              ) : (
+                <Accordion type="multiple" className="space-y-2">
+                  {failResults.slice().reverse().map((result) => (
+                    <AccordionItem key={result.id} value={result.id} className="border border-destructive/20 rounded-lg bg-destructive/5">
+                      <AccordionTrigger className="px-3 hover:no-underline">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getStatusIcon(result.status)}
+                          <div className="text-left">
+                            <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
+                          </div>
+                        </div>
+                        <Badge variant="destructive" className="ml-2">
+                          {result.status.toUpperCase()}
+                        </Badge>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pt-2">
+                        <div className="space-y-2 text-sm">
+                          <p><strong>URL:</strong> {result.url}</p>
+                          <p><strong>Response Time:</strong> {result.responseTime}ms</p>
+                          <p><strong>Status Code:</strong> {result.statusCode}</p>
                           {result.vulnerabilities.length > 0 && (
-                            <div className="mt-1 space-y-1">
-                              {result.vulnerabilities.map((vuln, index) => (
-                                <p key={index} className="text-sm text-destructive">
-                                  • {vuln}
-                                </p>
-                              ))}
+                            <div>
+                              <strong>Vulnerabilities:</strong>
+                              <ul className="list-disc pl-5 mt-1 space-y-1">
+                                {result.vulnerabilities.map((vuln, index) => (
+                                  <li key={index} className="text-destructive">
+                                    {vuln}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           )}
-                          <p className="text-xs text-muted-foreground">
-                            Response: {result.responseTime}ms | Status: {result.statusCode}
-                          </p>
+                          <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
                         </div>
-                      </div>
-                      <Badge variant="destructive">
-                        {result.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                  ))
-                )}
-              </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </div>

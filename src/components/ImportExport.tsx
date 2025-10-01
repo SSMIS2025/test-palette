@@ -416,7 +416,7 @@ export const ImportExport = () => {
                     onClick={() => {
                       const allEndpoints = getStoredData('endpoints', []);
                       const projectEndpoints = allEndpoints.filter((ep: Endpoint) => ep.projectId === selectedProject.id);
-                      exportToJSON(projectEndpoints, `${selectedProject.name}-endpoints`);
+                      exportToJSON(projectEndpoints, 'endpoints', selectedProject.name);
                     }} 
                     variant="outline" 
                     className="w-full"
