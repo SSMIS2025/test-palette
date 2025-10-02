@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Edit, Plus, Target, FolderOpen } from 'lucide-react';
 import { getStoredData, saveStoredData } from '@/lib/storage';
+import { getSessionData, saveSessionData, SESSION_KEYS } from '@/lib/session';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectManager, Project } from './ProjectManager';
 
@@ -61,7 +62,20 @@ export const EndpointManager = () => {
   useEffect(() => {
     const storedEndpoints = getStoredData('endpoints', []);
     setEndpoints(storedEndpoints);
+    
+    // Load last selected project from session
+    const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
+    if (sessionProject) {
+      setSelectedProject(sessionProject);
+    }
   }, []);
+
+  useEffect(() => {
+    // Save selected project to session whenever it changes
+    if (selectedProject) {
+      saveSessionData(SESSION_KEYS.SELECTED_PROJECT, selectedProject);
+    }
+  }, [selectedProject]);
 
   const filteredEndpoints = selectedProject 
     ? endpoints.filter(endpoint => endpoint.projectId === selectedProject.id)

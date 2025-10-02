@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FileUp, FileDown, Download, Upload, FileText, FileSpreadsheet, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStoredData, saveStoredData, exportToJSON, exportToCSV } from '@/lib/storage';
+import { getSessionData, saveSessionData, SESSION_KEYS } from '@/lib/session';
 import { ProjectManager, Project } from './ProjectManager';
 
 interface Endpoint {
@@ -38,6 +39,21 @@ export const ImportExport = () => {
   const [importData, setImportData] = useState('');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Load last selected project from session
+    const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
+    if (sessionProject) {
+      setSelectedProject(sessionProject);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save selected project to session whenever it changes
+    if (selectedProject) {
+      saveSessionData(SESSION_KEYS.SELECTED_PROJECT, selectedProject);
+    }
+  }, [selectedProject]);
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
