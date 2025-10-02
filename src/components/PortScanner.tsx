@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,12 @@ export const PortScanner = () => {
   const [progress, setProgress] = useState(0);
   const [currentPortIndex, setCurrentPortIndex] = useState(0);
   const [scanType, setScanType] = useState<'common' | 'range' | 'custom'>('common');
+  
+  // Ref to track the current state for the scan loop
+  const scanStateRef = useRef<ScanState>('idle');
+  
+  // Helper to get current state without type narrowing
+  const getCurrentState = (): ScanState => scanStateRef.current;
 
   useEffect(() => {
     const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
@@ -56,7 +62,12 @@ export const PortScanner = () => {
 
     const savedState = getSessionData(SESSION_KEYS.PORT_SCANNER_STATE, null);
     if (savedState) {
-      setScanState(savedState.scanState);
+      // Reset to idle if was running, paused, or stopped
+      const restoredState = ['running', 'paused', 'stopped'].includes(savedState.scanState) 
+        ? 'idle' 
+        : savedState.scanState;
+      setScanState(restoredState);
+      scanStateRef.current = restoredState;
       setCurrentPortIndex(savedState.currentPortIndex);
       setProgress(savedState.progress);
       setTarget(savedState.target);
@@ -73,6 +84,9 @@ export const PortScanner = () => {
   }, [selectedProject]);
 
   useEffect(() => {
+    // Update ref whenever state changes
+    scanStateRef.current = scanState;
+    
     saveSessionData(SESSION_KEYS.PORT_SCANNER_STATE, {
       scanState,
       currentPortIndex,
@@ -224,6 +238,7 @@ export const PortScanner = () => {
     }
 
     setScanState('running');
+    scanStateRef.current = 'running';
     setProgress(0);
     setCurrentPortIndex(0);
     setScanResults([]);
@@ -232,12 +247,24 @@ export const PortScanner = () => {
     });
 
     const results: PortScanResult[] = [];
+    let wasStopped = false;
 
     for (let i = 0; i < ports.length; i++) {
-      if (scanState === 'stopped') break;
+      // Check ref instead of state for immediate updates
+      if (getCurrentState() === 'stopped') {
+        wasStopped = true;
+        break;
+      }
       
-      while (scanState === 'paused') {
+      // Wait while paused
+      while (getCurrentState() === 'paused') {
         await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Double check if stopped while paused
+      if (getCurrentState() === 'stopped') {
+        wasStopped = true;
+        break;
       }
 
       const port = ports[i];
@@ -251,25 +278,38 @@ export const PortScanner = () => {
     }
 
     setScanState('idle');
-    setProgress(100);
-
-    const openPorts = results.filter(r => r.status === 'open').length;
-    toast.success(`Scan complete! Found ${openPorts} open ports out of ${ports.length} scanned.`);
+    scanStateRef.current = 'idle';
+    
+    // Only show completion message if not stopped
+    if (!wasStopped) {
+      setProgress(100);
+      const openPorts = results.filter(r => r.status === 'open').length;
+      toast.success(`Scan complete! Found ${openPorts} open ports out of ${ports.length} scanned.`);
+    }
   };
 
   const pauseScan = () => {
     setScanState('paused');
+    scanStateRef.current = 'paused';
     toast.info('Scan paused');
   };
 
   const resumeScan = () => {
     setScanState('running');
+    scanStateRef.current = 'running';
     toast.info('Scan resumed');
   };
 
   const stopScan = () => {
     setScanState('stopped');
+    scanStateRef.current = 'stopped';
     toast.warning('Scan stopped');
+    
+    // Reset to idle after a brief moment
+    setTimeout(() => {
+      setScanState('idle');
+      scanStateRef.current = 'idle';
+    }, 500);
   };
 
   const clearResults = () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +65,12 @@ export const TestRunner = () => {
   });
   const [showConfig, setShowConfig] = useState(false);
   const [summary, setSummary] = useState({ total: 0, pass: 0, fail: 0, notStarted: 0 });
+  
+  // Ref to track the current state for the test loop
+  const testStateRef = useRef<TestState>('idle');
+  
+  // Helper to get current state without type narrowing
+  const getCurrentState = (): TestState => testStateRef.current;
 
   useEffect(() => {
     const storedEndpoints = getStoredData('endpoints', []);
@@ -81,10 +87,15 @@ export const TestRunner = () => {
       if (project) setSelectedProject(project);
     }
 
-    // Restore session state
+    // Restore session state, but reset running/paused/stopped to idle
     const savedState = getSessionData(SESSION_KEYS.SCANNER_STATE, null);
     if (savedState) {
-      setTestState(savedState.testState);
+      // Reset to idle if was running, paused, or stopped
+      const restoredState = ['running', 'paused', 'stopped'].includes(savedState.testState) 
+        ? 'idle' 
+        : savedState.testState;
+      setTestState(restoredState);
+      testStateRef.current = restoredState;
       setCurrentTestIndex(savedState.currentTestIndex);
       setProgress(savedState.progress);
     }
@@ -97,6 +108,9 @@ export const TestRunner = () => {
   }, [selectedProject]);
 
   useEffect(() => {
+    // Update ref whenever state changes
+    testStateRef.current = testState;
+    
     // Save scanner state to session
     saveSessionData(SESSION_KEYS.SCANNER_STATE, {
       testState,
@@ -301,6 +315,7 @@ export const TestRunner = () => {
     }
 
     setTestState('running');
+    testStateRef.current = 'running';
     setProgress(0);
     setCurrentTestIndex(0);
     toast.info(`Starting tests for project: ${selectedProject.name}`, {
@@ -308,12 +323,24 @@ export const TestRunner = () => {
     });
 
     const newResults: TestResult[] = [];
+    let wasStopped = false;
 
     for (let i = 0; i < projectEndpoints.length; i++) {
-      if (testState === 'stopped') break;
+      // Check ref instead of state for immediate updates
+      if (getCurrentState() === 'stopped') {
+        wasStopped = true;
+        break;
+      }
       
-      while (testState === 'paused') {
+      // Wait while paused
+      while (getCurrentState() === 'paused') {
         await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Double check if stopped while paused
+      if (getCurrentState() === 'stopped') {
+        wasStopped = true;
+        break;
       }
 
       const endpoint = projectEndpoints[i];
@@ -330,15 +357,19 @@ export const TestRunner = () => {
 
     setCurrentTest(null);
     setTestState('idle');
-    setProgress(100);
-
-    const passCount = newResults.filter(r => r.status === 'pass').length;
-    const failCount = newResults.filter(r => r.status === 'fail' || r.status === 'error').length;
+    testStateRef.current = 'idle';
     
-    if (failCount > 0) {
-      toast.error(`Tests complete! ${passCount} passed, ${failCount} failed.`);
-    } else {
-      toast.success(`All ${passCount} tests passed!`);
+    // Only show completion message if not stopped
+    if (!wasStopped) {
+      setProgress(100);
+      const passCount = newResults.filter(r => r.status === 'pass').length;
+      const failCount = newResults.filter(r => r.status === 'fail' || r.status === 'error').length;
+      
+      if (failCount > 0) {
+        toast.error(`Tests complete! ${passCount} passed, ${failCount} failed.`);
+      } else {
+        toast.success(`All ${passCount} tests passed!`);
+      }
     }
   };
 
@@ -362,18 +393,27 @@ export const TestRunner = () => {
 
   const pauseTests = () => {
     setTestState('paused');
+    testStateRef.current = 'paused';
     toast.info('Tests paused');
   };
 
   const resumeTests = () => {
     setTestState('running');
+    testStateRef.current = 'running';
     toast.info('Tests resumed');
   };
 
   const stopTests = () => {
     setTestState('stopped');
+    testStateRef.current = 'stopped';
     setCurrentTest(null);
     toast.warning('Tests stopped');
+    
+    // Reset to idle after a brief moment
+    setTimeout(() => {
+      setTestState('idle');
+      testStateRef.current = 'idle';
+    }, 500);
   };
 
   const clearResults = () => {
