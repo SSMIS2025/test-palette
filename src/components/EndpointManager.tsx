@@ -32,6 +32,7 @@ export const EndpointManager = () => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     url: '',
@@ -78,7 +79,15 @@ export const EndpointManager = () => {
   }, [selectedProject]);
 
   const filteredEndpoints = selectedProject 
-    ? endpoints.filter(endpoint => endpoint.projectId === selectedProject.id)
+    ? endpoints.filter(endpoint => {
+        const matchesProject = endpoint.projectId === selectedProject.id;
+        const matchesSearch = searchQuery.trim() === '' || 
+          endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          endpoint.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          endpoint.method.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          endpoint.category.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesProject && matchesSearch;
+      })
     : [];
 
   const saveEndpoints = (updatedEndpoints: Endpoint[]) => {
@@ -312,10 +321,18 @@ export const EndpointManager = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
-                Configured Endpoints ({filteredEndpoints.length})
+                Configured Endpoints ({endpoints.filter(e => e.projectId === selectedProject.id).length})
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-4">
+                <Input
+                  placeholder="Search endpoints by name, URL, method, or category..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="max-w-md"
+                />
+              </div>
               {filteredEndpoints.length === 0 ? (
                 <div className="text-center py-8">
                   <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />

@@ -58,6 +58,7 @@ export const TestRunner = () => {
   const [currentTest, setCurrentTest] = useState<string | null>(null);
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [testConfig, setTestConfig] = useState<TestConfig>({
     projectId: '',
     expectedContent: '',
@@ -143,6 +144,18 @@ export const TestRunner = () => {
   const getProjectEndpoints = () => {
     if (!selectedProject) return [];
     return endpoints.filter(ep => ep.projectId === selectedProject.id);
+  };
+
+  const getFilteredEndpoints = () => {
+    const projectEndpoints = getProjectEndpoints();
+    if (searchQuery.trim() === '') return projectEndpoints;
+    
+    return projectEndpoints.filter(endpoint =>
+      endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      endpoint.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      endpoint.method.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      endpoint.priority.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   };
 
   const replaceIPAddress = (url: string, projectIP?: string) => {
@@ -682,8 +695,17 @@ export const TestRunner = () => {
               <p className="text-sm text-muted-foreground">Configure endpoints for this project first</p>
             </div>
           ) : (
-            <Accordion type="multiple" className="space-y-3">
-              {getProjectEndpoints().map((endpoint) => {
+            <>
+              <div className="mb-4">
+                <Input
+                  placeholder="Search endpoints by name, URL, method, or priority..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="max-w-md"
+                />
+              </div>
+              <Accordion type="multiple" className="space-y-3">
+                {getFilteredEndpoints().map((endpoint) => {
                 const isCurrentlyTesting = currentTest === endpoint.id;
                 return (
                   <AccordionItem 
@@ -748,7 +770,13 @@ export const TestRunner = () => {
                   </AccordionItem>
                 );
               })}
-            </Accordion>
+              </Accordion>
+              {getFilteredEndpoints().length === 0 && searchQuery && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No endpoints match your search criteria
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
