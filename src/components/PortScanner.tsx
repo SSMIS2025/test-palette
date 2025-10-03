@@ -62,15 +62,20 @@ export const PortScanner = () => {
 
     const savedState = getSessionData(SESSION_KEYS.PORT_SCANNER_STATE, null);
     if (savedState) {
+      // Restore scan results from session
+      if (savedState.scanResults) {
+        setScanResults(savedState.scanResults);
+      }
+      
       // Reset to idle if was running, paused, or stopped
       const restoredState = ['running', 'paused', 'stopped'].includes(savedState.scanState) 
         ? 'idle' 
         : savedState.scanState;
       setScanState(restoredState);
       scanStateRef.current = restoredState;
-      setCurrentPortIndex(savedState.currentPortIndex);
-      setProgress(savedState.progress);
-      setTarget(savedState.target);
+      setCurrentPortIndex(savedState.currentPortIndex || 0);
+      setProgress(savedState.progress || 0);
+      setTarget(savedState.target || '127.0.0.1');
     }
   }, []);
 
@@ -91,9 +96,10 @@ export const PortScanner = () => {
       scanState,
       currentPortIndex,
       progress,
-      target
+      target,
+      scanResults
     });
-  }, [scanState, currentPortIndex, progress, target]);
+  }, [scanState, currentPortIndex, progress, target, scanResults]);
 
   const getPortsToScan = () => {
     switch (scanType) {
@@ -538,106 +544,122 @@ export const PortScanner = () => {
         </CardContent>
       </Card>
 
-      {/* Scan Results - PASS/FAIL Accordion */}
+      {/* Scan Results - Parent Accordion with Open/Closed Categories */}
       {scanResults.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* PASS (Open Ports) */}
-          <Card className="card-green">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-success" />
-                Open Ports ({openResults.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {openResults.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No open ports found</p>
-              ) : (
-                <Accordion type="multiple" className="space-y-2">
-                  {openResults.map((result) => (
-                    <AccordionItem 
-                      key={result.port} 
-                      value={result.port.toString()}
-                      className="border border-success/20 rounded-lg bg-success/5"
-                    >
-                      <AccordionTrigger className="px-3 hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1">
-                          {getStatusIcon(result.status)}
-                          <div className="text-left">
-                            <span className="font-mono font-semibold">Port {result.port}</span>
-                            <Badge variant="outline" className="text-xs ml-2">
-                              {result.service}
+        <Card className="card-gradient">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Network className="h-5 w-5 text-primary animate-pulse-glow" />
+              Port Scan Results ({scanResults.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="multiple" className="space-y-4">
+              {/* Open Ports Section */}
+              <AccordionItem value="open-ports" className="border-success/30 rounded-lg bg-success/5">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <CheckCircle className="h-5 w-5 text-success" />
+                    <span className="font-semibold text-lg">Open Ports</span>
+                    <Badge className="bg-success text-success-foreground ml-auto mr-4">
+                      {openResults.length}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pt-3">
+                  {openResults.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No open ports found</p>
+                  ) : (
+                    <Accordion type="multiple" className="space-y-2">
+                      {openResults.map((result) => (
+                        <AccordionItem 
+                          key={result.port} 
+                          value={result.port.toString()}
+                          className="border border-success/20 rounded-lg bg-success/5"
+                        >
+                          <AccordionTrigger className="px-3 hover:no-underline">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getStatusIcon(result.status)}
+                              <div className="text-left">
+                                <span className="font-mono font-semibold">Port {result.port}</span>
+                                <Badge variant="outline" className="text-xs ml-2">
+                                  {result.service}
+                                </Badge>
+                              </div>
+                            </div>
+                            <Badge className="bg-success text-success-foreground ml-2">
+                              OPEN
                             </Badge>
-                          </div>
-                        </div>
-                        <Badge className="bg-success text-success-foreground ml-2">
-                          OPEN
-                        </Badge>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-3 pt-2">
-                        <div className="space-y-1 text-sm">
-                          <p><strong>Port:</strong> {result.port}</p>
-                          <p><strong>Service:</strong> {result.service}</p>
-                          {result.banner && (
-                            <p><strong>Banner:</strong> <code className="text-xs bg-muted p-1 rounded">{result.banner}</code></p>
-                          )}
-                          <p><strong>Status:</strong> <span className="text-success font-bold">OPEN</span></p>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-3 pt-2">
+                            <div className="space-y-1 text-sm">
+                              <p><strong>Port:</strong> {result.port}</p>
+                              <p><strong>Service:</strong> {result.service}</p>
+                              {result.banner && (
+                                <p><strong>Banner:</strong> <code className="text-xs bg-muted p-1 rounded">{result.banner}</code></p>
+                              )}
+                              <p><strong>Status:</strong> <span className="text-success font-bold">OPEN</span></p>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
 
-          {/* FAIL (Closed/Filtered Ports) */}
-          <Card className="card-red">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-                Closed/Filtered Ports ({failedResults.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {failedResults.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No closed/filtered ports</p>
-              ) : (
-                <Accordion type="multiple" className="space-y-2">
-                  {failedResults.map((result) => (
-                    <AccordionItem 
-                      key={result.port} 
-                      value={result.port.toString()}
-                      className="border border-muted rounded-lg bg-muted/10"
-                    >
-                      <AccordionTrigger className="px-3 hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1">
-                          {getStatusIcon(result.status)}
-                          <div className="text-left">
-                            <span className="font-mono font-semibold">Port {result.port}</span>
-                            <Badge variant="outline" className="text-xs ml-2">
-                              {result.service}
+              {/* Closed/Filtered Ports Section */}
+              <AccordionItem value="failed-ports" className="border-destructive/30 rounded-lg bg-destructive/5">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <span className="font-semibold text-lg">Closed/Filtered Ports</span>
+                    <Badge variant="destructive" className="ml-auto mr-4">
+                      {failedResults.length}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pt-3">
+                  {failedResults.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No closed/filtered ports</p>
+                  ) : (
+                    <Accordion type="multiple" className="space-y-2">
+                      {failedResults.map((result) => (
+                        <AccordionItem 
+                          key={result.port} 
+                          value={result.port.toString()}
+                          className="border border-muted rounded-lg bg-muted/10"
+                        >
+                          <AccordionTrigger className="px-3 hover:no-underline">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getStatusIcon(result.status)}
+                              <div className="text-left">
+                                <span className="font-mono font-semibold">Port {result.port}</span>
+                                <Badge variant="outline" className="text-xs ml-2">
+                                  {result.service}
+                                </Badge>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="ml-2">
+                              {result.status.toUpperCase()}
                             </Badge>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="ml-2">
-                          {result.status.toUpperCase()}
-                        </Badge>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-3 pt-2">
-                        <div className="space-y-1 text-sm">
-                          <p><strong>Port:</strong> {result.port}</p>
-                          <p><strong>Service:</strong> {result.service}</p>
-                          <p><strong>Status:</strong> <span className={getStatusColor(result.status)}>{result.status.toUpperCase()}</span></p>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-3 pt-2">
+                            <div className="space-y-1 text-sm">
+                              <p><strong>Port:</strong> {result.port}</p>
+                              <p><strong>Service:</strong> {result.service}</p>
+                              <p><strong>Status:</strong> <span className={getStatusColor(result.status)}>{result.status.toUpperCase()}</span></p>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

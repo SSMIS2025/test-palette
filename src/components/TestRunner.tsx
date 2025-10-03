@@ -75,29 +75,32 @@ export const TestRunner = () => {
   useEffect(() => {
     const storedEndpoints = getStoredData('endpoints', []);
     const storedProjects = getStoredData('projects', []);
-    const storedResults = getStoredData('testResults', []);
     const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
     
     setEndpoints(storedEndpoints);
     setProjects(storedProjects);
-    setTestResults(storedResults);
     
     if (sessionProject) {
       const project = storedProjects.find((p: Project) => p.id === sessionProject.id);
       if (project) setSelectedProject(project);
     }
 
-    // Restore session state, but reset running/paused/stopped to idle
+    // Restore session state including test results
     const savedState = getSessionData(SESSION_KEYS.SCANNER_STATE, null);
     if (savedState) {
+      // Restore test results from session
+      if (savedState.testResults) {
+        setTestResults(savedState.testResults);
+      }
+      
       // Reset to idle if was running, paused, or stopped
       const restoredState = ['running', 'paused', 'stopped'].includes(savedState.testState) 
         ? 'idle' 
         : savedState.testState;
       setTestState(restoredState);
       testStateRef.current = restoredState;
-      setCurrentTestIndex(savedState.currentTestIndex);
-      setProgress(savedState.progress);
+      setCurrentTestIndex(savedState.currentTestIndex || 0);
+      setProgress(savedState.progress || 0);
     }
   }, []);
 
@@ -111,13 +114,14 @@ export const TestRunner = () => {
     // Update ref whenever state changes
     testStateRef.current = testState;
     
-    // Save scanner state to session
+    // Save scanner state to session including test results
     saveSessionData(SESSION_KEYS.SCANNER_STATE, {
       testState,
       currentTestIndex,
-      progress
+      progress,
+      testResults
     });
-  }, [testState, currentTestIndex, progress]);
+  }, [testState, currentTestIndex, progress, testResults]);
 
   useEffect(() => {
     // Update summary stats
@@ -749,105 +753,121 @@ export const TestRunner = () => {
         </CardContent>
       </Card>
 
-      {/* Test Results - PASS/FAIL Accordion Categories */}
+      {/* Test Results - Parent Accordion with PASS/FAIL Categories */}
       {projectResults.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* PASS Results Accordion */}
-          <Card className="card-green">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-success" />
-                PASS Results ({passResults.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {passResults.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No passing tests yet</p>
-              ) : (
-                <Accordion type="multiple" className="space-y-2">
-                  {passResults.slice().reverse().map((result) => (
-                    <AccordionItem key={result.id} value={result.id} className="border border-success/20 rounded-lg bg-success/5">
-                      <AccordionTrigger className="px-3 hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1">
-                          {getStatusIcon(result.status)}
-                          <div className="text-left">
-                            <p className="font-mono text-sm font-medium">{result.endpointName}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
-                          </div>
-                        </div>
-                        <Badge className="bg-success text-success-foreground ml-2">
-                          PASS
-                        </Badge>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-3 pt-2">
-                        <div className="space-y-1 text-sm">
-                          <p><strong>URL:</strong> {result.url}</p>
-                          <p><strong>Response Time:</strong> {result.responseTime}ms</p>
-                          <p><strong>Status Code:</strong> {result.statusCode}</p>
-                          <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* FAIL Results Accordion */}
-          <Card className="card-red">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-                FAIL Results ({failResults.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {failResults.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No failed tests</p>
-              ) : (
-                <Accordion type="multiple" className="space-y-2">
-                  {failResults.slice().reverse().map((result) => (
-                    <AccordionItem key={result.id} value={result.id} className="border border-destructive/20 rounded-lg bg-destructive/5">
-                      <AccordionTrigger className="px-3 hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1">
-                          {getStatusIcon(result.status)}
-                          <div className="text-left">
-                            <p className="font-mono text-sm font-medium">{result.endpointName}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
-                          </div>
-                        </div>
-                        <Badge variant="destructive" className="ml-2">
-                          {result.status.toUpperCase()}
-                        </Badge>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-3 pt-2">
-                        <div className="space-y-2 text-sm">
-                          <p><strong>URL:</strong> {result.url}</p>
-                          <p><strong>Response Time:</strong> {result.responseTime}ms</p>
-                          <p><strong>Status Code:</strong> {result.statusCode}</p>
-                          {result.vulnerabilities.length > 0 && (
-                            <div>
-                              <strong>Vulnerabilities:</strong>
-                              <ul className="list-disc pl-5 mt-1 space-y-1">
-                                {result.vulnerabilities.map((vuln, index) => (
-                                  <li key={index} className="text-destructive">
-                                    {vuln}
-                                  </li>
-                                ))}
-                              </ul>
+        <Card className="card-gradient">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary animate-pulse-glow" />
+              Test Results ({projectResults.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="multiple" className="space-y-4">
+              {/* PASS Results Section */}
+              <AccordionItem value="pass-results" className="border-success/30 rounded-lg bg-success/5">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <CheckCircle className="h-5 w-5 text-success" />
+                    <span className="font-semibold text-lg">PASS Results</span>
+                    <Badge className="bg-success text-success-foreground ml-auto mr-4">
+                      {passResults.length}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pt-3">
+                  {passResults.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No passing tests yet</p>
+                  ) : (
+                    <Accordion type="multiple" className="space-y-2">
+                      {passResults.slice().reverse().map((result) => (
+                        <AccordionItem key={result.id} value={result.id} className="border border-success/20 rounded-lg bg-success/5">
+                          <AccordionTrigger className="px-3 hover:no-underline">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getStatusIcon(result.status)}
+                              <div className="text-left">
+                                <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                                <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
+                              </div>
                             </div>
-                          )}
-                          <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                            <Badge className="bg-success text-success-foreground ml-2">
+                              PASS
+                            </Badge>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-3 pt-2">
+                            <div className="space-y-1 text-sm">
+                              <p><strong>URL:</strong> {result.url}</p>
+                              <p><strong>Response Time:</strong> {result.responseTime}ms</p>
+                              <p><strong>Status Code:</strong> {result.statusCode}</p>
+                              <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* FAIL Results Section */}
+              <AccordionItem value="fail-results" className="border-destructive/30 rounded-lg bg-destructive/5">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <span className="font-semibold text-lg">FAIL Results</span>
+                    <Badge variant="destructive" className="ml-auto mr-4">
+                      {failResults.length}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pt-3">
+                  {failResults.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No failed tests</p>
+                  ) : (
+                    <Accordion type="multiple" className="space-y-2">
+                      {failResults.slice().reverse().map((result) => (
+                        <AccordionItem key={result.id} value={result.id} className="border border-destructive/20 rounded-lg bg-destructive/5">
+                          <AccordionTrigger className="px-3 hover:no-underline">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getStatusIcon(result.status)}
+                              <div className="text-left">
+                                <p className="font-mono text-sm font-medium">{result.endpointName}</p>
+                                <p className="font-mono text-xs text-muted-foreground">{result.method}</p>
+                              </div>
+                            </div>
+                            <Badge variant="destructive" className="ml-2">
+                              {result.status.toUpperCase()}
+                            </Badge>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-3 pt-2">
+                            <div className="space-y-2 text-sm">
+                              <p><strong>URL:</strong> {result.url}</p>
+                              <p><strong>Response Time:</strong> {result.responseTime}ms</p>
+                              <p><strong>Status Code:</strong> {result.statusCode}</p>
+                              {result.vulnerabilities.length > 0 && (
+                                <div>
+                                  <strong>Vulnerabilities:</strong>
+                                  <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {result.vulnerabilities.map((vuln, index) => (
+                                      <li key={index} className="text-destructive">
+                                        {vuln}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              <p><strong>Timestamp:</strong> {new Date(result.timestamp).toLocaleString()}</p>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
