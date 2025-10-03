@@ -7,9 +7,28 @@ import { ImportExport } from '@/components/ImportExport';
 import { ProjectManager } from '@/components/ProjectManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Target, Network, Database, FileUp, FolderOpen } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isScannerRunning, setIsScannerRunning] = useState(false);
+  const [isPortScannerRunning, setIsPortScannerRunning] = useState(false);
+
+  const handleTabChange = (value: string) => {
+    if (isScannerRunning && value !== 'scanner') {
+      toast.error('Scanner is running', {
+        description: 'Please stop or pause the scanner before navigating to other tabs.'
+      });
+      return;
+    }
+    if (isPortScannerRunning && value !== 'ports') {
+      toast.error('Port Scanner is running', {
+        description: 'Please stop or pause the port scanner before navigating to other tabs.'
+      });
+      return;
+    }
+    setActiveTab(value);
+  };
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -27,7 +46,7 @@ const Index = () => {
       </header>
 
       {/* Main Interface */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-6 bg-card border border-border">
           <TabsTrigger value="dashboard" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Shield className="h-4 w-4" />
@@ -69,11 +88,11 @@ const Index = () => {
           </TabsContent>
           
           <TabsContent value="scanner" className="space-y-6">
-            <TestRunner />
+            <TestRunner onScanningStateChange={setIsScannerRunning} />
           </TabsContent>
           
           <TabsContent value="ports" className="space-y-6">
-            <PortScanner />
+            <PortScanner onScanningStateChange={setIsPortScannerRunning} />
           </TabsContent>
           
           <TabsContent value="import" className="space-y-6">

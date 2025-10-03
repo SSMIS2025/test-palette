@@ -49,7 +49,11 @@ interface TestConfig {
 
 type TestState = 'idle' | 'running' | 'paused' | 'stopped';
 
-export const TestRunner = () => {
+interface TestRunnerProps {
+  onScanningStateChange?: (isScanning: boolean) => void;
+}
+
+export const TestRunner = ({ onScanningStateChange }: TestRunnerProps = {}) => {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -72,6 +76,12 @@ export const TestRunner = () => {
   
   // Helper to get current state without type narrowing
   const getCurrentState = (): TestState => testStateRef.current;
+
+  // Notify parent when scanning state changes
+  useEffect(() => {
+    const isScanning = testState === 'running' || testState === 'paused';
+    onScanningStateChange?.(isScanning);
+  }, [testState, onScanningStateChange]);
 
   useEffect(() => {
     const storedEndpoints = getStoredData('endpoints', []);

@@ -37,7 +37,11 @@ const commonPorts = [
 
 type ScanState = 'idle' | 'running' | 'paused' | 'stopped';
 
-export const PortScanner = () => {
+interface PortScannerProps {
+  onScanningStateChange?: (isScanning: boolean) => void;
+}
+
+export const PortScanner = ({ onScanningStateChange }: PortScannerProps = {}) => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [target, setTarget] = useState('127.0.0.1');
   const [portRange, setPortRange] = useState('1-1000');
@@ -53,6 +57,12 @@ export const PortScanner = () => {
   
   // Helper to get current state without type narrowing
   const getCurrentState = (): ScanState => scanStateRef.current;
+
+  // Notify parent when scanning state changes
+  useEffect(() => {
+    const isScanning = scanState === 'running' || scanState === 'paused';
+    onScanningStateChange?.(isScanning);
+  }, [scanState, onScanningStateChange]);
 
   useEffect(() => {
     const sessionProject = getSessionData(SESSION_KEYS.SELECTED_PROJECT, null);
